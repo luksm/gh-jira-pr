@@ -1,0 +1,16 @@
+{
+  "name": "gh-jira-pr",
+  "version": "1.0.0",
+  "description": "",
+  "main": "request.js",
+  "scripts": {
+    "start": "node request",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "Base64": "^1.1.0",
+    "node-fetch": "^2.6.0"
+  }
+}
