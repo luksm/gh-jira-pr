@@ -9,9 +9,11 @@ keys = require(path);
 
 let PR_ID = "";
 
+const originBranch = process.argv[2] || "develop";
+
 let QUERY = `query {
   repository(name: "cxs-client", owner: "foreseecode") {
-    pullRequests(last: 10, headRefName: "develop", states: OPEN) {
+    pullRequests(last: 10, headRefName: "${originBranch}", states: OPEN) {
       nodes {
         id
         number
@@ -118,7 +120,7 @@ async function getJiraInfo(tickets) {
         key,
         status: status.name,
         fixVersions: fixVersions[0] && fixVersions[0].name,
-        squad: squad[squadField].value,
+        squad: squad[squadField] ? squad[squadField].value : "",
       };
     });
   });
