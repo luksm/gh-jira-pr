@@ -1,8 +1,6 @@
 const fetch = require("node-fetch");
 const base64 = require("Base64");
 
-const fs = require("fs");
-
 const path = "./keys.js";
 let keys = { GH_TOKEN: "", FS_CRED: "", FS_URL: "", VOC_CRED: "", VOC_URL: "" };
 keys = require(path);
@@ -11,14 +9,14 @@ let PR_ID = "";
 
 const originBranch = process.argv[2] || "develop";
 
-let QUERY = `query {
+const QUERY = (after = false) => `{
   repository(name: "cxs-client", owner: "foreseecode") {
     pullRequests(last: 10, headRefName: "${originBranch}", states: OPEN) {
       nodes {
         id
         number
         title
-        commits(first: 100) {
+        commits(first: 100${after ? `, after: "${after}"` : ""}) {
           nodes {
             commit {
               messageHeadline
@@ -45,25 +43,23 @@ const MUTATION = ({ PR_ID, PR_BODY }) => `mutation MyMutation {
   }
 }`;
 
-const data = (query) => `
-{
-    "query": "${query
-      .replace(/\"/g, '\\"')
-      .replace(/\n/g, " ")
-      .replace(/  /g, " ")
-      .replace(/  /g, " ")}"
-}
-`;
+const data = (query) =>
+  `{ "query": "${query
+    .replace(/\"/g, '\\"')
+    .replace(/\n/g, " ")
+    .replace(/  /g, " ")
+    .replace(/  /g, " ")}" }`;
 
 async function postDataGH(data = {}) {
-  const response = await fetch("https://api.github.com/graphql", {
+  const options = {
     method: "POST",
     headers: {
       "user-agent": "luksm",
       Authorization: `bearer ${keys.GH_TOKEN}`,
     },
     body: data,
-  });
+  };
+  const response = await fetch("https://api.github.com/graphql", options);
   return response;
 }
 
@@ -89,17 +85,27 @@ async function postDataJIRA(ticket = "") {
   return response;
 }
 
-function getCommits() {
-  return postDataGH(data(QUERY))
-    .then((response) => response.json())
-    .then((response) => {
-      const pr = response.data.repository.pullRequests.nodes[0];
-      PR_ID = pr.id;
-      console.log(`#${pr.number} ${pr.title}`);
-      return pr.commits.nodes;
-      // return response.data.repository.pullRequest.commits.nodes;
-    })
-    .then((data) => data.map((data) => data.commit.messageHeadline));
+async function getCommits() {
+  const handleFetch = async (after) => {
+    return postDataGH(data(QUERY(after)))
+      .then((response) => response.json())
+      .then(async (response) => {
+        const pr = response.data.repository.pullRequests.nodes[0];
+        PR_ID = pr.id;
+        console.log(`#${pr.number} ${pr.title}`);
+        if (pr.commits.pageInfo.hasNextPage) {
+          const moreNodes = await handleFetch(pr.commits.pageInfo.endCursor);
+          return [...pr.commits.nodes, ...moreNodes];
+        }
+        return pr.commits.nodes;
+
+        // return response.data.repository.pullRequest.commits.nodes;
+      });
+  };
+
+  const commits = await handleFetch();
+
+  return commits.map((data) => data.commit.messageHeadline);
 }
 
 async function getJiraInfo(tickets) {
@@ -157,6 +163,7 @@ function formatTable(tickets) {
   return response;
 }
 
+console.log(new Date().toString());
 getCommits()
   .then(getTicketsFromCommits)
   // .then(console.log);
