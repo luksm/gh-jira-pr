@@ -8,10 +8,11 @@ keys = require(path);
 let PR_ID = "";
 
 const originBranch = process.argv[2] || "develop";
+const reppo = process.argv[3] || "cxs-client";
 
 const QUERY = (after = false) => `{
-  repository(name: "cxs-client", owner: "foreseecode") {
-    pullRequests(last: 10, headRefName: "${originBranch}", states: OPEN) {
+  repository(name: "${reppo}", owner: "foreseecode") {
+    pullRequests(last: 1, headRefName: "${originBranch}", states: OPEN) {
       nodes {
         id
         number
@@ -64,14 +65,11 @@ async function postDataGH(data = {}) {
 }
 
 async function postDataJIRA(ticket = "") {
-  let jiraCredential = keys.FS_CRED;
-  let jiraUrl = keys.FS_URL;
-  let team = "customfield_11825";
-
-  if (ticket.indexOf("VOC") !== -1) {
-    jiraCredential = keys.VOC_CRED;
-    jiraUrl = keys.VOC_URL;
-    team = "customfield_15001";
+  jiraCredential = keys.VOC_CRED;
+  jiraUrl = keys.VOC_URL;
+  team = "customfield_15001";
+  if (ticket.indexOf("VOC") === -1 && ticket.indexOf("FS") === -1) {
+    ticket = `FS${ticket}`;
   }
 
   const url = `https://${jiraUrl}/rest/api/2/issue/${ticket}?fields=fixVersions,status,${team}`;
@@ -120,7 +118,11 @@ async function getJiraInfo(tickets) {
   return Promise.all(stats).then((tickets) => {
     return tickets.map((ticket) => {
       const { key, fields = {} } = ticket;
-      const { fixVersions = [], status, ...squad } = fields;
+      const {
+        fixVersions = [{ name: "" }],
+        status = { name: "" },
+        ...squad
+      } = fields;
       const squadField = Object.keys(squad);
       return {
         key,
@@ -147,7 +149,7 @@ function getTicketsFromCommits(commits = []) {
 }
 
 function getTicketUrl(ticket) {
-  const url = ticket.indexOf("VOC") === -1 ? keys.FS_URL : keys.VOC_URL;
+  const url = keys.VOC_URL;
   return `[${ticket}](https://${url}/browse/${ticket})`;
 }
 
