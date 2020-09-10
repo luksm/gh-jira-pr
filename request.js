@@ -67,12 +67,10 @@ async function postDataGH(data = {}) {
 async function postDataJIRA(ticket = "") {
   jiraCredential = keys.VOC_CRED;
   jiraUrl = keys.VOC_URL;
-  team = "customfield_15001";
-  if (ticket.indexOf("VOC") === -1 && ticket.indexOf("FS") === -1) {
-    ticket = `FS${ticket}`;
-  }
+  team = keys.VOC.team;
+  codeLocation = keys.VOC.codeLocation;
 
-  const url = `https://${jiraUrl}/rest/api/2/issue/${ticket}?fields=fixVersions,status,${team}`;
+  const url = `https://${jiraUrl}/rest/api/2/issue/${ticket}?fields=fixVersions,status,${team},${codeLocation}`;
   const response = await fetch(url, {
     method: "GET",
     headers: {
@@ -121,14 +119,15 @@ async function getJiraInfo(tickets) {
       const {
         fixVersions = [{ name: "" }],
         status = { name: "" },
-        ...squad
+        [keys.VOC.team]: team = { value: "" },
+        [keys.VOC.codeLocation]: codeLocation = { value: "" },
       } = fields;
-      const squadField = Object.keys(squad);
       return {
         key,
         status: status.name,
-        fixVersions: fixVersions[0] && fixVersions[0].name,
-        squad: squad[squadField] ? squad[squadField].value : "",
+        fixVersions: fixVersions.map((version) => version.name).join(","),
+        squad: team.value,
+        codeLocation: codeLocation.value,
       };
     });
   });
@@ -155,11 +154,13 @@ function getTicketUrl(ticket) {
 
 function formatTable(tickets) {
   let response = [];
-  response.push("Jira Ticket | Fix Version | Status | Squad");
-  response.push("----------- | ----------- | ------ | ------");
-  tickets.forEach(({ key, status, fixVersions, squad }) =>
+  response.push("Jira Ticket | Fix Version | Status | Squad | Code Location");
+  response.push("----------- | ----------- | ------ | ----- | -------------");
+  tickets.forEach(({ key, status, fixVersions, squad, codeLocation }) =>
     response.push(
-      `${getTicketUrl(key)} | ${fixVersions} | ${status} | ${squad}`
+      `${getTicketUrl(
+        key
+      )} | ${fixVersions} | ${status} | ${squad} | ${codeLocation}`
     )
   );
   return response;
@@ -168,12 +169,10 @@ function formatTable(tickets) {
 console.log(new Date().toString());
 getCommits()
   .then(getTicketsFromCommits)
-  // .then(console.log);
   .then(getJiraInfo)
   .then(formatTable)
   .then((commits) => commits.join("\\r\\n"))
   .then((PR_BODY) => MUTATION({ PR_ID, PR_BODY }))
   .then((change) =>
     postDataGH(data(change)).then((response) => response.json())
-  )
-  .then(console.log);
+  );
