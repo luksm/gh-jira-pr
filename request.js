@@ -2,7 +2,7 @@ const fetch = require("node-fetch");
 const base64 = require("Base64");
 
 const path = "./keys.js";
-let keys = { GH_TOKEN: "", FS_CRED: "", FS_URL: "", VOC_CRED: "", VOC_URL: "" };
+let keys = { GH_TOKEN: "", VOC_CRED: "", VOC_URL: "" };
 keys = require(path);
 
 let PR_ID = "";
@@ -10,6 +10,13 @@ let PR_ID = "";
 const originBranch = process.argv[2] || "develop";
 const reppo = process.argv[3] || "cxs-client";
 
+/**
+ * Creates the Graphql query with the desired information
+ *
+ * In order to page results, add the `after` param with the starting commit id
+ *
+ * @param {string} after - Starting commit id
+ */
 const QUERY = (after = false) => `{
   repository(name: "${reppo}", owner: "foreseecode") {
     pullRequests(last: 1, headRefName: "${originBranch}", states: OPEN) {
@@ -36,6 +43,13 @@ const QUERY = (after = false) => `{
   }
 }`;
 
+/**
+ * Creates the Graphql mutation with the desired to update the PR
+ *
+ * @param {object} pullRequest - Pull request information
+ * @param {string} pullRequest.PR_ID - Pull Request ID
+ * @param {string} pullRequest.PR_BODY -  Pull Request Body
+ */
 const MUTATION = ({ PR_ID, PR_BODY }) => `mutation MyMutation {
   updatePullRequest(input: {pullRequestId: \"${PR_ID}\", body: \"${PR_BODY}\"}) {
     pullRequest {
@@ -44,6 +58,12 @@ const MUTATION = ({ PR_ID, PR_BODY }) => `mutation MyMutation {
   }
 }`;
 
+/**
+ * Formats query so we can use it in a request
+ *
+ * @param {string} query
+ * @returns {string} formatted query
+ */
 const data = (query) =>
   `{ "query": "${query
     .replace(/\"/g, '\\"')
@@ -51,6 +71,14 @@ const data = (query) =>
     .replace(/  /g, " ")
     .replace(/  /g, " ")}" }`;
 
+/**
+ * Post requests to GH API
+ *
+ * Since we are using GH GraphQL API, all of our requests are always POST
+ *
+ * @param {object} data - Body data to be posted
+ * @returns {object} API Response
+ */
 async function postDataGH(data = {}) {
   const options = {
     method: "POST",
@@ -64,6 +92,14 @@ async function postDataGH(data = {}) {
   return response;
 }
 
+/**
+ * This function is used to fetch data from Jira tickets
+ *
+ * We read from keys.js the information to create the URL
+ *
+ * @param {string} ticket - Ticket Key we'll be fetchin data from
+ * @returns {object} API Response
+ */
 async function postDataJIRA(ticket = "") {
   jiraCredential = keys.VOC_CRED;
   jiraUrl = keys.VOC_URL;
@@ -81,6 +117,11 @@ async function postDataJIRA(ticket = "") {
   return response;
 }
 
+/**
+ * Get the all the commits present in a Pull Request
+ *
+ * @returns list of commit message summaries
+ */
 async function getCommits() {
   const handleFetch = async (after) => {
     return postDataGH(data(QUERY(after)))
@@ -104,6 +145,14 @@ async function getCommits() {
   return commits.map((data) => data.commit.messageHeadline);
 }
 
+/**
+ * Extract information from JIRA request
+ *
+ * Here we go through the list of tickets and get all the information we need
+ *
+ * @param {string[]} tickets - List of tickets to get information from
+ * @returns {object[]} List with the desired informaton from JIRA
+ */
 async function getJiraInfo(tickets) {
   const stats = [];
   await tickets.forEach((ticket) => {
@@ -127,12 +176,22 @@ async function getJiraInfo(tickets) {
         status: status.name,
         fixVersions: fixVersions.map((version) => version.name).join(","),
         squad: team.value,
-        codeLocation: codeLocation.value,
+        codeLocation: codeLocation !== null ? codeLocation.value : "",
       };
     });
   });
 }
 
+/**
+ * Moves throught the list of commits in this PR and filter out any that have
+ * the correct structure to so we can get the information from JIRA.
+ *
+ * Multiple commits can have the same ticket number, so we create a new set and
+ * return only one instance of each ticket
+ *
+ * @param {string[]} commits - List of all commits that are in the PR
+ * @returns {object[]} List of ticket numbers that we'll get information from
+ */
 function getTicketsFromCommits(commits = []) {
   return commits
     .map((commit) => commit.match(/(?<ticket>([A-Z]+)-([0-9]+))/g))
@@ -152,6 +211,16 @@ function getTicketUrl(ticket) {
   return `[${ticket}](https://${url}/browse/${ticket})`;
 }
 
+/**
+ * Formats a list of tickets into a markdown table
+ * @param {Object[]} tickets - List of tickets to format
+ * @param {string} ticket.key - Key of the ticket
+ * @param {string} ticket.status - Current Status of the Ticket
+ * @param {string} ticket.fixVersions - What fix version does this belong to
+ * @param {string} ticket.squad - What Squad is working on it
+ * @param {string} ticket.codeLocation - Wher is this already deployed
+ * @returns {string} Markdown table
+ */
 function formatTable(tickets) {
   let response = [];
   response.push("Jira Ticket | Fix Version | Status | Squad | Code Location");

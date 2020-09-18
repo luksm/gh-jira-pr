@@ -5,12 +5,15 @@
   "main": "request.js",
   "scripts": {
     "start": "node request",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "doc": "jsdoc2md request.js > API.md"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "Base64": "^1.1.0",
     "node-fetch": "^2.6.0"
+  },
+  "devDependencies": {
+    "jsdoc-to-markdown": "^6.0.1"
   }
 }
