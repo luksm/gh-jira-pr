@@ -56,8 +56,9 @@ async function postDataJIRA(ticket = "") {
   jiraUrl = keys.VOC_URL;
   team = keys.VOC.team;
   codeLocation = keys.VOC.codeLocation;
+  featureFlag = keys.VOC.featureFlag;
 
-  const url = `https://${jiraUrl}/rest/api/2/issue/${ticket}?fields=fixVersions,status,${team},${codeLocation}`;
+  const url = `https://${jiraUrl}/rest/api/2/issue/${ticket}?fields=fixVersions,status,${team},${codeLocation},${featureFlag}`;
   const response = await fetch(url, {
     method: "GET",
     headers: {
@@ -99,11 +100,13 @@ async function getJiraInfo(tickets) {
   return Promise.all(stats).then((tickets) => {
     return tickets.map((ticket) => {
       const { key, fields = {} } = ticket;
+
       const {
         fixVersions = [{ name: "" }],
         status = { name: "" },
         [keys.VOC.team]: team = { value: "" },
         [keys.VOC.codeLocation]: codeLocation = { value: "" },
+        [keys.VOC.featureFlag]: featureFlag = "",
       } = fields;
       return {
         key,
@@ -111,6 +114,7 @@ async function getJiraInfo(tickets) {
         fixVersions: fixVersions.map((version) => version.name).join(","),
         squad: team.value,
         codeLocation: codeLocation !== null ? codeLocation.value : "",
+        featureFlag: featureFlag !== null ? featureFlag : "",
       };
     });
   });
@@ -157,15 +161,46 @@ function getTicketUrl(ticket) {
  */
 function formatTable(tickets) {
   let response = [];
-  response.push("Jira Ticket | Fix Version | Status | Squad | Code Location");
-  response.push("----------- | ----------- | ------ | ----- | -------------");
-  tickets.forEach(({ key, status, fixVersions, squad, codeLocation }) =>
-    response.push(
-      `${getTicketUrl(
-        key
-      )} | ${fixVersions} | ${status} | ${squad} | ${codeLocation}`
-    )
+  response.push(
+    "Jira Ticket | Fix Version | Status | Squad | Code Location | Feature Flag"
   );
+  response.push(
+    "----------- | ----------- | ------ | ----- | ------------- | ------------"
+  );
+  tickets
+    .sort((a, b) => {
+      const keyA = Number.parseFloat(a.key) || 0;
+      const keyB = Number.parseFloat(b.key) || 0;
+
+      if (keyA < keyB) {
+        return -1;
+      }
+
+      if (keyA > keyB) {
+        return 1;
+      }
+      return 0;
+    })
+    .sort((a, b) => {
+      const fixA = Number.parseFloat(a.fixVersions) || 0;
+      const fixB = Number.parseFloat(b.fixVersions) || 0;
+
+      if (fixA < fixB) {
+        return -1;
+      }
+
+      if (fixA > fixB) {
+        return 1;
+      }
+      return 0;
+    })
+    .forEach(({ key, status, fixVersions, squad, codeLocation, featureFlag }) =>
+      response.push(
+        `${getTicketUrl(
+          key
+        )} | ${fixVersions} | ${status} | ${squad} | ${codeLocation} | ${featureFlag}`
+      )
+    );
   return response;
 }
 
@@ -174,7 +209,10 @@ getCommits()
   .then(getTicketsFromCommits)
   .then(getJiraInfo)
   .then(formatTable)
-  // .then((commits) => commits.join("\\r\\n"))
+  .then((commits) =>
+    commits.join(`
+`)
+  )
   .then(console.log);
 //   .then((PR_BODY) => MUTATION({ PR_ID, PR_BODY }))
 //   .then((change) =>
